@@ -13,16 +13,11 @@ type exp =
   | IfExp of exp * exp * exp
   | LogicOp of logicOp * exp * exp
   | LetExp of id * exp * exp
-  | LetRecExp of (id * exp) list * exp
-  | LetAndExp of (id * exp) list * exp
-
 
 type program =
     Exp of exp
   | Decl of id * exp
   | LetDecls of (id * exp) list
-  | LetRecDecl of (id * exp) list
-  | LetAndDecl of (id * exp) list
   
 type tyvar = int
 type ty =

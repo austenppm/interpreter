@@ -8,8 +8,6 @@ let reservedWords = [
   ("true", Parser.TRUE);
   ("in", Parser.IN);
   ("let", Parser.LET);
-  ("and", Parser.AND);
-  ("letrecursive", Parser.LETRECURSIVE);
 ]
 }
 rule comment depth = parse
@@ -35,10 +33,8 @@ and main = parse
 | "=" { Parser.EQ }
 | "<" { Parser.LT }
 | ">" { Parser.GT }
-| "&&" { Parser.LOGICAND }
-| "||" {Parser.LOGICOR}
-| "and" { Parser.AND }
-| "letrecursive" { Parser.LETRECURSIVE }
+| "&&" { Parser.AND }
+| "||" {Parser.OR}
 
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in

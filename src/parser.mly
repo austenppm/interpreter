@@ -5,8 +5,8 @@ open Syntax
 %token LPAREN RPAREN SEMISEMI
 %token PLUS MULT LT GT
 %token IF THEN ELSE TRUE FALSE
-%token LOGICAND LOGICOR
-%token LET IN EQ AND LETRECURSIVE
+%token AND OR
+%token LET IN EQ 
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -19,12 +19,10 @@ toplevel :
     e=Expr SEMISEMI { Exp e }
   | LET x=ID EQ e=Expr SEMISEMI { Decl (x, e) }
   | LET decls=LetDecls SEMISEMI { LetDecls decls } 
-  | LET x=ID EQ e1=Expr LETRECURSIVE decls=LetRecDecls SEMISEMI { LetRecDecl ((x, e1)::decls) }
 
 Expr :
     e=IfExpr  { e }
-  | e=LetExpr { e }
-  | e=LetRecExpr { e } 
+  | e=LetExpr { e } 
   | e=OrExpr  { e }
 
 LetExpr :
@@ -33,31 +31,13 @@ LetExpr :
 LetDecls :
      x=ID EQ e=Expr { [(x, e)] }
    | x=ID EQ e=Expr LET decls=LetDecls { (x, e) :: decls }
-   | x=ID EQ e=Expr AND decls=LetDecls { (x, e) :: decls }
-
-LetAndExpr :
-  | LET bindings=LetAndBindings IN e=Expr { LetAndExp (bindings, e) }
-
-LetAndBindings :
-  | LET x=ID EQ e=Expr { [(x, e)] }
-  | bindings=LetAndBindings AND x=ID EQ e=Expr { (x, e) :: bindings }
-
-Decl :
-  | LET bindings=LetAndBindings { LetAndDecl bindings }
-
-LetRecExpr :
-  LET x=ID EQ e1=Expr LETRECURSIVE decls=LetRecDecls IN e2=Expr { LetRecExp ((x, e1)::decls, e2) }
-
-LetRecDecls :
-  x=ID EQ e=Expr AND decls=LetRecDecls { (x, e) :: decls }
-  | x=ID EQ e=Expr { [(x, e)] }
 
 OrExpr :
-    l=AndExpr LOGICOR r=OrExpr  { LogicOp (Or, l, r) }
+    l=AndExpr OR r=OrExpr  { LogicOp (Or, l, r) }
   | e=AndExpr { e }
 
 AndExpr :
-    l=CompExpr LOGICAND r=AndExpr { LogicOp (And, l, r) }
+    l=CompExpr AND r=AndExpr { LogicOp (And, l, r) }
   | e=CompExpr { e }
 
 CompExpr :
