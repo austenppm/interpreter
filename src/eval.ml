@@ -1,0 +1,100 @@
+open Syntax
+
+type exval =
+    IntV of int
+  | BoolV of bool
+and dnval = exval
+
+exception Error of string
+
+let err s = raise (Error s)
+
+(* pretty printing *)
+let rec string_of_exval = function
+    IntV i -> string_of_int i
+  | BoolV b -> string_of_bool b
+
+let pp_val v = print_string (string_of_exval v)
+
+let rec apply_prim op arg1 arg2 = match op, arg1, arg2 with
+    Plus, IntV i1, IntV i2 -> IntV (i1 + i2)
+  | Plus, _, _ -> err ("Both arguments must be integer: +")
+  | Mult, IntV i1, IntV i2 -> IntV (i1 * i2)
+  | Mult, _, _ -> err ("Both arguments must be integer: *")
+  | Lt, IntV i1, IntV i2 -> BoolV (i1 < i2)
+  | Lt, _, _ -> err ("Both arguments must be integer: <")
+  | Gt, IntV i1, IntV i2 -> BoolV (i1 > i2)
+  | Gt, _, _ -> err ("Both arguments must be integer: >")
+
+
+let rec eval_exp env = function
+    Var x ->
+    (try Environment.lookup x env with
+       Environment.Not_bound -> err ("Variable not bound: " ^ x))
+  | ILit i -> IntV i
+  | BLit b -> BoolV b
+  | BinOp (op, exp1, exp2) ->
+    let arg1 = eval_exp env exp1 in
+    let arg2 = eval_exp env exp2 in
+    apply_prim op arg1 arg2
+  | IfExp (exp1, exp2, exp3) ->
+    let test = eval_exp env exp1 in
+    (match test with
+       BoolV true -> eval_exp env exp2
+     | BoolV false -> eval_exp env exp3
+     | _ -> err ("Test expression must be boolean: if"))
+  | LogicOp (op, exp1, exp2) ->
+        (match op with
+        And ->
+        let arg1 = eval_exp env exp1 in
+        (match arg1 with
+        BoolV (false) -> BoolV (false)
+        | BoolV (true) -> let arg2 = eval_exp env exp2 in
+        (match arg2 with
+        BoolV (true) -> BoolV (true)
+        | BoolV (false) -> BoolV (false)
+        | _ -> err ("Both arguments must be boolean: &&"))
+        | _ -> err ("Both arguments must be boolean: &&"))
+        | Or ->
+        let arg1 = eval_exp env exp1 in
+        (match arg1 with
+        BoolV (true) -> BoolV (true)
+        | BoolV (false) -> let arg2 = eval_exp env exp2 in
+        (match arg2 with
+        BoolV (true) -> BoolV (true)
+        | BoolV (false) -> BoolV (false)
+        | _ -> err ("Both arguments must be boolean: ||"))
+        | _ -> err ("Both arguments must be boolean: ||")))
+  | LetExp (id, exp1, exp2) ->
+    let value = eval_exp env exp1 in
+    eval_exp (Environment.extend id value env) exp2
+  | LetRecExp (decls, exp) ->
+    let env' = List.fold_left (fun env (id, exp1) -> Environment.extend id (eval_exp env exp1) env) env decls in
+    eval_exp env' exp
+  | LetAndExp (bindings, exp) ->
+    let new_env = List.fold_left (fun env (id, e) -> 
+      Environment.extend id (eval_exp env e) env) env bindings in
+    eval_exp new_env exp
+        
+
+let eval_decl env = function
+    Exp e -> let v = eval_exp env e in ("-", env, v)
+  | Decl (id, e) ->
+      let v = eval_exp env e in (id, Environment.extend id v env, v)
+  | LetDecls decls ->
+       let rec eval_decls env = function
+         | [] -> ("-", env, IntV 0)
+         | (id, e) :: decls ->
+             let v = eval_exp env e in
+             let env' = Environment.extend id v env in
+             eval_decls env' decls
+       in
+       eval_decls env decls
+  | LetRecDecl decls ->
+        let env' = List.fold_left (fun env (id, exp) -> Environment.extend id (eval_exp env exp) env) env decls in
+        ("-", env', IntV 0)
+  | LetAndDecl bindings ->
+    let new_env, last_val = List.fold_left (fun (env, _) (id, e) -> 
+      let v = eval_exp env e in
+      (Environment.extend id v env, v)) (env, IntV 0) bindings in
+    ("-", new_env, last_val)
