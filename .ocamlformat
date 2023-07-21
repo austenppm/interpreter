@@ -1,0 +1,5 @@
+# これを入れると >>= が break しないようになる
+leading-nested-match-parens=true
+break-fun-decl=fit-or-vertical
+type-decl=sparse
+# align-cases=true
