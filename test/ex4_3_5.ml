@@ -1,5 +1,6 @@
 open OUnit
 open TypingTestGenerator
+open Miniml.Syntax
 
 let dataset_for_typing = [
   { input = "fun x -> x;;"; expected = "'a -> 'a" };

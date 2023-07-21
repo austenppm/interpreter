@@ -9,6 +9,6 @@ let dataset_for_eval = [
 ];;
 
 let () = ignore(run_test_tt_main (
-    "ex3.4.5" >:::
+    "ex3.4.5" >::: 
     gen_eval_tests dataset_for_eval
   ))

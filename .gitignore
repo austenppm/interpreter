@@ -8,6 +8,12 @@
 *.cmxs
 *.cmxa
 
+
+
+docu/
+memo/
+.vscode/
+
 # ocamlbuild working directory
 _build/
 

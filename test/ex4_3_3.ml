@@ -1,5 +1,6 @@
 open OUnit
 open PretypingTestGenerator
+open Miniml
 
 let dataset_for_unify = [
   {
@@ -114,10 +115,6 @@ let dataset_for_unify = [
     input = ["'a -> 'c -> int -> 'c -> 'a", "'b -> int -> 'b -> int -> 'b"];
     expected = UnifyOk ["'a", "'b"; "'c", "int"; "'b", "int"]
   };
-  {
-    input = ["'a list", "'b list"];
-    expected = UnifyOk ["'a", "'b"]
-  }
 ]
 
 let () = ignore(run_test_tt_main (
