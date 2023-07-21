@@ -1,208 +1,165 @@
 open Syntax
-open Resultlib
 
-(* 型環境 *)
-type tyenv = ty Environment.t
+exception Error of string
 
-(* 型代入 *)
-type subst = (tyvar * ty) list
+let err s = raise (Error s)
 
-(* 制約条件 *)
-type eqs = (ty * ty) list
+(* Type Environment *)
+type tyenv = tysc Environment.t 
+(* type tyenv = ty Environment.t *)
+type subst = (tyvar * ty) list 
 
-let fresh_tyvar =
-  let counter = ref 0 in
-  let body () =
-    let v = !counter in
-    counter := v + 1;
-    v
-  in
-  body
+let rec freevar_tyenv tyenv = (* 型環境に自由に出現している型変数の集合->各型スキームの自由型変数を1つのリスト統合*)
+  Environment.fold_right (fun tysc set -> MySet.union set (freevar_tysc tysc)) tyenv MySet.empty
 
-let rec freevar_ty : ty -> tyvar MySet.t = function
-  | TyInt | TyBool -> MySet.empty
-  | TyVar tyvar -> MySet.singleton tyvar
-  | TyFun (x, y) -> MySet.union (freevar_ty x) (freevar_ty y)
-  | TyList t -> freevar_ty t
 
-let subst_type subst ty : ty =
-  let rec subst_single (tyvar_from, ty_to) ty_from : ty =
-    match ty_from with
-    | TyVar tyvar -> if tyvar == tyvar_from then ty_to else ty_from
-    | TyFun (x, y) ->
-        TyFun
-          ( subst_single (tyvar_from, ty_to) x,
-            subst_single (tyvar_from, ty_to) y )
-    | TyList ty -> TyList (subst_single (tyvar_from, ty_to) ty)
-    | _ -> ty_from
-  in
-  List.fold_left (fun acc_ty s -> subst_single s acc_ty) ty subst
+(*型代入を型の等式集合に変換*) 
+let eqs_of_subst s = List.map (fun (tv,ty) -> (TyVar tv, ty)) s
 
-let eqs_of_subst subst : eqs =
-  List.map (fun (tyvar, ty) -> (TyVar tyvar, ty)) subst
+  
+let rec subst_type subst typ =   
+      match subst with
+         [] -> typ
+       | (tv,ty) :: rest ->
+             match typ with 
+           | TyInt -> TyInt
+           | TyBool -> TyBool
+           | TyVar tv' -> if tv' = tv then subst_type rest ty 
+                          else subst_type rest typ
+           | TyFun (ty1, ty2) -> TyFun (subst_type subst ty1, subst_type subst ty2)
+           | _ -> err ("Not Implemented!")
 
-let subst_eqs subst eqs : eqs =
-  let single_subst_eqs (tyvar_from, ty_to) eqs =
-    List.map
-      (fun (ty1, ty2) ->
-        ( subst_type [ (tyvar_from, ty_to) ] ty1,
-          subst_type [ (tyvar_from, ty_to) ] ty2 ))
-      eqs
-  in
-  List.fold_left (fun eqs s -> single_subst_eqs s eqs) eqs subst
+let closure ty tyenv subst = 
+    let fv_tyenv' = freevar_tyenv tyenv in
+    let fv_tyenv =
+      MySet.bigunion
+        (MySet.map
+            (fun id -> freevar_ty (subst_type subst (TyVar id)))
+            fv_tyenv') in
+    let ids = MySet.diff (freevar_ty ty) fv_tyenv in
+      TyScheme (MySet.to_list ids, ty)
 
-(* 等式制約に対して単一化問題を解いて型代入を得る *)
-let rec unify : eqs -> (subst, string) result = function
-  | [] -> Ok []
-  | eq :: eqs ->
-      (match eq with
-      | TyInt, TyInt | TyBool, TyBool -> unify eqs
-      | TyFun (ty11, ty12), TyFun (ty21, ty22) ->
-          unify ((ty11, ty21) :: (ty12, ty22) :: eqs)
-      | TyVar alpha, ty | ty, TyVar alpha ->
-          (* tyvar は ref 依存なので structural equality をチェックすべき *)
-          if ty = TyVar alpha then unify eqs
-          else if not (MySet.member alpha (freevar_ty ty)) then
-            unify (subst_eqs [ (alpha, ty) ] eqs) >>= fun substs ->
-            Ok ((alpha, ty) :: substs)
-          else Error "Tyvar appears in FTV(ty)"
-      | TyList ty1, TyList ty2 -> unify ((ty1, ty2) :: eqs)
-      | _ -> Error "Types couldn't be matched")
 
-let ty_prim op ty1 ty2 : eqs * ty =
-  match op with
-  | Plus | Mult -> ([ (ty1, TyInt); (ty2, TyInt) ], TyInt)
-  | Lt -> ([ (ty1, TyInt); (ty2, TyInt) ], TyBool)
-  | And | Or -> ([ (ty1, TyBool); (ty2, TyBool) ], TyBool)
-  | Append ->
-      (* ty2 がなんらかの list であるという制約条件を表現するために tyvar を新たに生成 *)
-      let listty = TyVar (fresh_tyvar ()) in
-      (* unity で ty2 が list であるという条件を先に見た方が効率が良い *)
-      ([ (ty2, TyList listty); (ty1, listty) ], TyList listty)
+(*型の等式集合に型代入を適用する*)
+let rec subst_eqs s eqs = List.map (fun (ty1, ty2) -> (subst_type s ty1, subst_type s ty2)) eqs     
 
-let rec ty_exp' tyenv exp : (subst * ty, string) result =
-  match exp with
-  | Var x ->
-      (match Environment.lookup x tyenv with
-      | Some x -> Ok ([], x)
-      | None -> Error ("Variable not bound: " ^ x))
-  | ILit _ -> Ok ([], TyInt)
-  | BLit _ -> Ok ([], TyBool)
-  | Nil ->
-      (* Nil の型は分からないので型変数を新しく生成 *)
-      Ok ([], TyList (TyVar (fresh_tyvar ())))
-  | BinOp (op, exp1, exp2) ->
-      ty_exp' tyenv exp1 >>= fun (subst1, ty1) ->
-      ty_exp' tyenv exp2 >>= fun (subst2, ty2) ->
-      let eqs3, ty = ty_prim op ty1 ty2 in
-      (* subst1 と subst2 を等式制約の集合に変換して、eqs3 と合わせる *)
-      let eqs = eqs_of_subst subst1 @ eqs_of_subst subst2 @ eqs3 in
-      (* 全体の制約をもう一度解く *)
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty)
-  | IfExp (exp1, exp2, exp3) ->
-      ty_exp' tyenv exp1 >>= fun (subst1, ty1) ->
-      ty_exp' tyenv exp2 >>= fun (subst2, ty2) ->
-      ty_exp' tyenv exp3 >>= fun (subst3, ty3) ->
-      let eqs =
-        eqs_of_subst subst1 @ eqs_of_subst subst2 @ eqs_of_subst subst3
-        @ [
-            (* 条件文の型は bool でなければならない *)
-            (ty1, TyBool);
-            (* then/else 文の型は一致しなければならない *)
-            (ty2, ty3);
-          ]
-      in
-      (* 全体の型は ty2 = ty3 になる *)
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty2)
-  | LetExp (vars, exp2) ->
-      (* tyenv の基で全ての宣言文を評価して tyenv に追加して返す *)
-      let ty_decl_exp tyenv vars : (subst * tyenv, string) result =
-        List.fold_left
-          (fun r_acc (id, exp1) ->
-            r_acc >>= fun (acc_subst, acc_tyenv) ->
-            ty_exp' tyenv exp1 >>= fun (subst1, ty1) ->
-            Ok (acc_subst @ subst1, Environment.extend id ty1 acc_tyenv))
-          (Ok ([], tyenv))
-          vars
-      in
-      ty_decl_exp tyenv vars >>= fun (subst1, newtyenv) ->
-      (* exp1 の型を追加した型環境で exp2 の型を推論 *)
-      ty_exp' newtyenv exp2 >>= fun (subst2, ty2) ->
-      let eqs = eqs_of_subst subst1 @ eqs_of_subst subst2 in
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty2)
+let rec occur_check tv = function 
+| TyVar tv' -> tv = tv'
+| TyFun (ty1, ty2) -> (occur_check tv ty1) || (occur_check tv ty2)
+(* | TyList ty -> Todo*)
+| _ -> false
+             
+let rec unify = function (*等式制約の単一化*)
+    [] -> []
+  | (ty1, ty2) :: rest -> (match ty1, ty2 with
+      TyInt, TyInt | TyBool, TyBool -> unify rest
+    | TyFun (ty11, ty12), TyFun (ty21, ty22) -> unify ((ty11, ty21) :: (ty12, ty22) :: rest)
+    | TyVar tv1, TyVar tv2 ->
+          if tv1 = tv2 then unify rest
+          else let s = [(tv1, ty2)] in s @ (unify (subst_eqs s rest))
+    | TyVar tv, ty | ty, TyVar tv ->
+          if occur_check tv ty then err ("Type Error: Type " ^ string_of_ty ty1 ^ " occured in　" ^ string_of_ty ty2 ^ "!")
+          else let s = [(tv, ty)] in s @ (unify (subst_eqs s rest))
+    | _, _ -> err ("Unification failed because of type error!"))
+
+
+   
+
+(*リストの操作関数*)
+let get_left (id,_) = id
+let get_right (_,e) = e
+let get_two l = List.map (fun (id,(_,ty)) -> (id,ty)) l
+let get_s l = List.map ( fun (_,(s,_)) -> s) l
+let rec append l1 l2 = match l1 with
+  [] -> l2
+  | x::rest -> x :: append rest l2;;
+
+let ty_prim op ty1 ty2 = match op with 
+  Plus -> ([(ty1, TyInt); (ty2, TyInt)], TyInt)
+  | Mult -> ([(ty1, TyInt); (ty2, TyInt)], TyInt)
+  | Lt -> ([(ty1, TyInt); (ty2, TyInt)], TyBool)
+  | And -> ([(ty1, TyBool); (ty2, TyBool)], TyBool)
+  | Or -> ([(ty1, TyBool); (ty2, TyBool)], TyBool)
+
+
+
+let rec ty_exp (tyenv : tyenv) = function
+   Var x ->
+      (try 
+        let TyScheme (vars, ty) = Environment.lookup x tyenv in
+        let s = List.map (fun id -> (id, TyVar (fresh_tyvar ()))) vars in
+          ([], subst_type s ty)
+       with Environment.Not_bound -> err ("variable not bound: " ^ x))
+  | ILit _ -> ([],TyInt)
+  | BLit _ -> ([],TyBool)
+  | BinOp (op, exp1, exp2) -> (try
+    let (s1, ty1) = ty_exp tyenv exp1 in
+    let (s2, ty2) = ty_exp tyenv exp2 in
+    let (eqs3, ty) = ty_prim op ty1 ty2 in
+    let eqs = (eqs_of_subst s1) @ (eqs_of_subst s2) @ eqs3 in (* s1 と s2 を等式制約の集合に変換して，eqs3 と合わせる *)
+    let s3 = unify eqs in (s3, subst_type s3 ty) with
+        _ ->  let op_str = id_of_binop (var_of_binop op) in 
+              if op = Plus || op = Mult || op = Lt then 
+              err ("Both arguments must be integer: " ^ op_str ) 
+              else  err ("Both arguments must be boolean: " ^ op_str ) )  
+  | IfExp (exp1, exp2, exp3) -> (try
+    let (s1, ty1) = ty_exp tyenv exp1 in
+    let (s2, ty2) = ty_exp tyenv exp2 in
+    let (s3, ty3) = ty_exp tyenv exp3 in
+    (* if ty1 != TyBool then err ("Type of if expression must be boolean: if") *)
+    let eqs =  (eqs_of_subst s1) @ (eqs_of_subst s2) @
+          (eqs_of_subst s3) @ [(ty1, TyBool)] @ [(ty2, ty3)] in
+          let s4 = unify eqs in (s4, subst_type s4 ty2) with
+        _ -> err ("Type Error in if expression: if") )
+  | LetExp (e_ls, restexp) -> 
+    let id_s_ty = List.map (fun (id,e) -> (id, ty_exp tyenv e)) e_ls in
+    let e_s = get_s id_s_ty in (*各idの型代入*)
+    let e_eqs = List.map eqs_of_subst e_s in (*各idの型代入の等式制約 *)
+    let e_eqs_app = List.fold_left append [] e_eqs in (*各等式制約listを一つのlistに統合*)
+    let newtyenv = List.fold_left (*型環境更新*)
+          ( fun tyenv' (id', (s', ty')) -> Environment.extend id' (closure ty' tyenv' s') tyenv') tyenv id_s_ty in 
+    let (rest_s, rest_ty) = ty_exp newtyenv restexp in
+    let eqs = e_eqs_app @ eqs_of_subst rest_s in
+    let s = unify eqs in (s,subst_type s rest_ty)
+  | LetRecExp (id, para, exp1, exp2) -> 
+    let ty_para = TyVar (fresh_tyvar ()) in
+    let ty_exp1 = TyVar (fresh_tyvar ()) in
+    let ty_id = TyFun (ty_para, ty_exp1) in
+    let newtyenv = Environment.extend id (tysc_of_ty ty_id) tyenv in
+    let newtyenv2 = Environment.extend para (tysc_of_ty ty_para) newtyenv in
+    let (s_e1, ty_e1) = ty_exp newtyenv2 exp1 in
+    let s1 = unify (eqs_of_subst s_e1 @ [(ty_e1, ty_exp1)]) in
+    let newty = subst_type s1 ty_id in
+    let newtyenv3 = Environment.extend id (closure newty tyenv s_e1) tyenv in
+    let (s_e2, ty_e2) = ty_exp newtyenv3 exp2 in
+    let eqs = (eqs_of_subst s_e2) @ (eqs_of_subst s_e1) @ [(ty_e1,ty_exp1)] in
+    let s = unify eqs in (s, subst_type s ty_e2)
   | FunExp (id, exp) ->
-      (* id の型を表す型変数を生成 *)
-      let domty = TyVar (fresh_tyvar ()) in
-      (* id : domty で tyenv を拡張し、その下で exp を型推論 *)
-      ty_exp' (Environment.extend id domty tyenv) exp >>= fun (subst, ranty) ->
-      Ok (subst, TyFun (subst_type subst domty, ranty))
-  | LetRecExp (id, para, exp1, exp2) ->
-      (* 関数の型を表す型変数を生成 *)
-      let domty = TyVar (fresh_tyvar ()) in
-      let ranty = TyVar (fresh_tyvar ()) in
-      let exp1_env =
-        Environment.extend id
-          (TyFun (domty, ranty))
-          (Environment.extend para domty tyenv)
-      in
-      ty_exp' exp1_env exp1 >>= fun (subst1, ty1) ->
-      let exp2_env = Environment.extend id (TyFun (domty, ranty)) tyenv in
-      ty_exp' exp2_env exp2 >>= fun (subst2, ty2) ->
-      let eqs =
-        eqs_of_subst subst1 @ eqs_of_subst subst2
-        @ [
-            (* exp1 の型は関数の値域の型に一致する *) (ty1, ranty);
-          ]
-      in
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty2)
-  | AppExp (exp1, exp2) ->
-      ty_exp' tyenv exp2 >>= fun (subst2, ty1) ->
-      (* ty3 は ty1 -> ty2 なる関数の型 *)
-      ty_exp' tyenv exp1 >>= fun (subst1, ty3) ->
-      (* T-App に関する制約条件と、関数適用式全体の型 ty2 を求める *)
-      let app_eqs, ty2 =
-        match ty3 with
-        (* exp1 が既に TyFun と判明している場合 *)
-        | TyFun (ty1', ty2) -> ([ (ty1, ty1') ], ty2)
-        (* そうでない場合、exp1 に TyFun 制約を新しくかけてあげる *)
-        | _ ->
-            (* exp1 : ty1' -> ty2 に表す *)
-            let ty1' = TyVar (fresh_tyvar ()) in
-            let ty2 = TyVar (fresh_tyvar ()) in
-            ([ (ty3, TyFun (ty1', ty2)); (ty1, ty1') ], ty2)
-      in
-      let eqs = eqs_of_subst subst2 @ eqs_of_subst subst1 @ app_eqs in
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty2)
-  | MatchExp (exp0, exp1, x_id, xs_id, exp2) ->
-      (*
-        match exp0 with [] -> exp1 | x::xs -> exp2
+    let domty = TyVar (fresh_tyvar ()) in
+    let s, ranty = 
+      ty_exp (Environment.extend id (tysc_of_ty domty) tyenv) exp in
+        (s, TyFun (subst_type s domty, ranty))
+  | AppExp (exp1, exp2) -> 
+    let (s1, ty1) = ty_exp tyenv exp1 in
+    let (s2, ty2) = ty_exp tyenv exp2 in
+    let domty = TyVar (fresh_tyvar ()) in
+    let eqs = (ty1, TyFun(ty2, domty)) :: (eqs_of_subst s1) @ (eqs_of_subst s2) in 
+    let s3 = unify eqs in (s3, subst_type s3 domty) 
+  | _ -> err ("Not Implemented!")
+  
 
-        exp0 : ty1 list
-        x : ty1
-        y : ty1 list
-        exp1 : ty2
-        exp2 : ty2
-      *)
-      ty_exp' tyenv exp0 >>= fun (subst0, ty0) ->
-      ty_exp' tyenv exp1 >>= fun (subst1, ty2) ->
-      (* まず exp0 の型を ty1 list に合わせるために ty1 を生成 *)
-      let ty1 = TyVar (fresh_tyvar ()) in
-      (* x と xs を入れた環境上で exp2 を評価 *)
-      let exp2_tyenv =
-        Environment.extend x_id ty1
-          (Environment.extend xs_id (TyList ty1) tyenv)
-      in
-      ty_exp' exp2_tyenv exp2 >>= fun (subst2, ty2') ->
-      let eqs =
-        eqs_of_subst subst0 @ eqs_of_subst subst1 @ eqs_of_subst subst2
-        @ [
-            (* exp0 : ty1 list *)
-            (ty0, TyList ty1);
-            (* exp1 の型と exp2 の型が一致しないといけない *)
-            (ty2, ty2');
-          ]
-      in
-      unify eqs >>= fun subst -> Ok (subst, subst_type subst ty2)
+let ty_decl tyenv = function (*(id,型)と型環境を返す*)
+    Exp e -> (["-", get_right (ty_exp tyenv e)], tyenv)
+  | Decl e_ls ->
+    let id_s_ty = List.map (fun (id,e) -> (id, ty_exp tyenv e)) e_ls in
+    let id_ty = List.map (fun (id,e) -> (id, get_right (ty_exp tyenv e))) e_ls in
+    let newtyenv = List.fold_left 
+        (fun tyenv' (id, (s,ty)) -> Environment.extend id (closure ty tyenv' s) tyenv') tyenv id_s_ty in
+         (id_ty, newtyenv)
+  | RecDecl (id, para, e) -> 
+      let (s, ty) = ty_exp tyenv (LetRecExp (id,para,e,Var id)) in
+      let newtyenv = Environment.extend id (closure ty tyenv s) tyenv in (["-", ty], newtyenv)
+  | QuitDecl -> exit 0 
+  (* | _ -> err ("Not Implemented!") *)
+  
 
-(* `subst * ty` でなく `ty` だけを返してくれる ty_exp *)
-let ty_exp tyenv exp : (ty, string) result = Result.map snd (ty_exp' tyenv exp)
