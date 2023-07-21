@@ -2,15 +2,30 @@ open OUnit
 open EvalTestGenerator
 open Miniml.Eval
 
-let dataset_for_eval = [
-  { input = "[1; 2; 3];;"; expected = ConsV (IntV 1, ConsV (IntV 2, ConsV (IntV 3, NilV))) };
-  { input = "4 :: [1; 2; 3];;"; expected = ConsV (IntV 4, ConsV (IntV 1, ConsV (IntV 2, ConsV (IntV 3, NilV)))) };
-  { input = "[1] :: [2] :: [];;"; expected = ConsV (ConsV (IntV 1, NilV), ConsV (ConsV (IntV 2, NilV), NilV)) };
-  { input = "[1] :: [2] :: [] :: [];;"; expected = ConsV ((ConsV (IntV 1, NilV)), ConsV ((ConsV (IntV 2, NilV)), ConsV (NilV, NilV))) };
-  { input = "[[1]; [1; 2]; 3];;"; expected = ConsV (ConsV (IntV 1, NilV), ConsV (ConsV (IntV 1, ConsV (IntV 2, NilV)), ConsV (IntV 3, NilV))) };
-];;
+let dataset_for_eval =
+  [
+    { input = "[1; 2; 3];;"; expected = ListV [ IntV 1; IntV 2; IntV 3 ] };
+    {
+      input = "4 :: [1; 2; 3];;";
+      expected = ListV [ IntV 4; IntV 1; IntV 2; IntV 3 ];
+    };
+    {
+      input = "[1] :: [2] :: [];;";
+      expected = ListV [ ListV [ IntV 1 ]; ListV [ IntV 2 ] ];
+    };
+    {
+      input = "[1] :: [2] :: [] :: [];;";
+      expected = ListV [ ListV [ IntV 1 ]; ListV [ IntV 2 ]; ListV [] ];
+    };
+    {
+      input = "[[1]; [1; 2]; 3];;";
+      expected = ListV [ ListV [ IntV 1 ]; ListV [ IntV 1; IntV 2 ]; IntV 3 ];
+    };
+    {
+      input = "[[[[1; 2]]]];;";
+      expected = ListV [ ListV [ ListV [ ListV [ IntV 1; IntV 2 ] ] ] ];
+    };
+  ]
 
-let () = ignore(run_test_tt_main (
-    "ex3.6.2" >:::
-    gen_eval_tests dataset_for_eval
-  ))
+let () =
+  ignore (run_test_tt_main ("ex3.6.2" >::: gen_eval_tests dataset_for_eval))

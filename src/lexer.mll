@@ -6,23 +6,21 @@ let reservedWords = [
   ("if", Parser.IF);
   ("then", Parser.THEN);
   ("true", Parser.TRUE);
-  ("in", Parser.IN);
   ("let", Parser.LET);
-  ("and", Parser.LETAND);
+  ("in", Parser.IN);
   ("fun", Parser.FUN);
   ("rec", Parser.REC);
+  ("match", Parser.MATCH);
+  ("with", Parser.WITH);
+  ("and", Parser.LITAND);
 ]
 }
-rule comment depth = parse
-  | "(*" { comment (depth + 1) lexbuf }
-  | "*)" { if depth = 0 then main lexbuf else comment (depth - 1) lexbuf }
-  | _    { comment depth lexbuf }
-  | eof  { failwith "Unterminated comment" }
 
-and main = parse
+rule main = parse
   (* ignore spacing and newline characters *)
   [' ' '\009' '\012' '\n']+     { main lexbuf }
-| "(*" { comment 0 lexbuf }
+
+| "(*" { comment 1 lexbuf }
 
 | "-"? ['0'-'9']+
     { Parser.INTV (int_of_string (Lexing.lexeme lexbuf)) }
@@ -33,12 +31,16 @@ and main = parse
 | "+" { Parser.PLUS }
 | "*" { Parser.MULT }
 | "<" { Parser.LT }
-| "=" { Parser.EQ }
-| "->" { Parser.RARROW }
-| ">" { Parser.GT }
-| "and" { Parser.LETAND }
 | "&&" { Parser.AND }
-| "||" {Parser.OR}
+| "||" { Parser.OR }
+| "=" { Parser.ASSIGN }
+| "->" { Parser.RARROW }
+| "[]" { Parser.NIL }
+| "|" { Parser.BAR }
+| "::" { Parser.COLONCOLON }
+| "[" { Parser.LBRACKET }
+| "]" { Parser.RBRACKET }
+| ";" { Parser.SEMI }
 
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in
@@ -48,5 +50,10 @@ and main = parse
       _ -> Parser.ID id
      }
 | eof { exit 0 }
+
+and comment i = parse
+  "(*" { comment (i+1) lexbuf }
+| "*)" { if i == 1 then main lexbuf else comment (i-1) lexbuf }
+| _ { comment i lexbuf }
 
 

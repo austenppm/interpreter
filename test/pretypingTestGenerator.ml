@@ -136,7 +136,7 @@ let gen_subst_type_tests (dataset: subst_type_testcase list) =
        dataset)
 
 let gen_unify_tests (dataset: unify_testcase list) =
-  let exec eq = try UnifyOk (unify eq) with _ -> UnifyErr in
+  let exec eq = try UnifyOk (Result.get_ok (unify eq)) with _ -> UnifyErr in
   gen_tests
     ~ishow: (fun eq ->
         Printf.sprintf "unify %s"

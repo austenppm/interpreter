@@ -1,6 +1,5 @@
 open OUnit
 open PretypingTestGenerator
-open Miniml
 
 let dataset_for_subst_type = [
   (* 1st example in the textbook *)
@@ -148,6 +147,11 @@ let dataset_for_subst_type = [
     ];
     input = "bool -> ('a -> 'a) -> 'b";
     expected = "bool -> ('a -> 'a) -> 'b"
+  };
+  {
+    subst = ["'a", "int"];
+    input = "'a -> 'a list";
+    expected = "int -> int list"
   };
 ]
 

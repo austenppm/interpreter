@@ -1,6 +1,5 @@
 open OUnit
 open TypingTestGenerator
-open Miniml.Syntax
 
 let dataset_for_typing = [
   { input = "1 + 2;;"; expected = "int" };

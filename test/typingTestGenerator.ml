@@ -3,6 +3,8 @@ open Miniml
 open Miniml.Typing
 open Miniml.Syntax
 
+exception TypingError of string
+
 type typedcase = { input: string; expected: string }
 type errorcase = { input: string }
 
@@ -68,12 +70,16 @@ let convert_ty ty =
   let _, ty = convert [] ty in
   ty
 
+let ty_decl tyenv = function
+  | Exp e -> ty_exp tyenv e
+  | _ -> Error "Not implemented"
+
 let typing input =
   Exec.exec
     (fun env program ->
        (* let env, ty = ty_decl env program *)
        let ty = ty_decl env program in
-       env, ty)
+       env, match ty with Ok t -> t | Error e -> raise (TypingError e))
     Cui.initial_tyenv
     input
 
