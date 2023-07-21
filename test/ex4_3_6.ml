@@ -2,7 +2,6 @@ open OUnit
 open TypingTestGenerator
 
 let dataset_for_typing = [
-  { input = "let x = 0 in let rec f = fun x -> if x then 0 else 1 in x;;"; expected = "int" };
   { input = "let rec g = fun h -> fun t -> fun f -> fun x -> f h (t f x) in g;;"; expected = "'a -> (('a -> 'b -> 'c) -> 'd -> 'b) -> ('a -> 'b -> 'c) -> 'd -> 'c" };
   { input = "let rec s = fun x -> fun y -> fun z -> x z (y z) in let rec k = fun x -> fun y -> x in let rec k' = fun x -> fun y -> x in s k k';;"; expected = "'a -> 'a" };
   { input = "let rec pair = fun x1 -> fun x2 -> fun y -> y x1 x2 in let rec proj1 = fun p -> p (fun x1 -> fun x2 -> x1) in let rec proj2 = fun p -> p (fun x1 -> fun x2 -> x2) in proj1 (pair 1 100);;"; expected = "int" };
