@@ -5,6 +5,7 @@ type evaluatedcase = { input: string; expected: exval }
 type errorcase = { input: string }
 
 type eval_to_raise_result =
+  (* | Evaluated of exval *)
   | Evaluated of exval
   | ErrorRaised
 

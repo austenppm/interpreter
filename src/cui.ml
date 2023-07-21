@@ -37,15 +37,19 @@ let rec read_eval_print env tyenv =
 (* 大域環境を表す let 宣言 *)
 let initial_env =
   Environment.extend "i" (IntV 1)
-    (Environment.extend "v" (IntV 5)
-       (Environment.extend "x" (IntV 10)
-          (* iiを2、iiiを3、ivを4に束縛する大域環境です。 *)
-          (Environment.extend "ii" (IntV 2)
-             (Environment.extend "iii" (IntV 3)
-                (Environment.extend "iv" (IntV 4) Environment.empty)))))
+  (Environment.extend "ii" (IntV 2)
+   (Environment.extend "iii" (IntV 3)
+    (Environment.extend "iv" (IntV 4)
+      (Environment.extend "v" (IntV 5)
+        (Environment.extend "x" (IntV 10) Environment.empty)))))
 
-(* 大域の型環境を表す let 宣言 *)
-let initial_tyenv =
-  Environment.extend "i" TyInt
-    (Environment.extend "v" TyInt
-       (Environment.extend "x" TyInt Environment.empty))
+let initial_tyenv = 
+  Environment.extend "i" (tysc_of_ty TyInt)
+  (Environment.extend "ii" (tysc_of_ty TyInt)
+    (Environment.extend "iii" (tysc_of_ty TyInt)
+     (Environment.extend "iv" (tysc_of_ty TyInt)
+       (Environment.extend "v" (tysc_of_ty TyInt)
+         (Environment.extend "x" (tysc_of_ty TyInt) Environment.empty)))))
+
+        
+    

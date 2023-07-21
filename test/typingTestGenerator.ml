@@ -1,5 +1,6 @@
 open Testutil
 open Miniml
+(* open Miniml.Cui *)
 open Miniml.Typing
 open Miniml.Syntax
 
@@ -76,6 +77,7 @@ let typing input =
        env, ty)
     Cui.initial_tyenv
     input
+
 
 let typing_to_raise src =
   try

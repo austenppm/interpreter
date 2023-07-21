@@ -6,6 +6,7 @@ let reservedWords = [
   ("if", Parser.IF);
   ("then", Parser.THEN);
   ("true", Parser.TRUE);
+<<<<<<< HEAD
   ("in", Parser.IN);
   ("let", Parser.LET);
   ("fun", Parser.FUN);
@@ -13,6 +14,15 @@ let reservedWords = [
   ("rec", Parser.REC);
   ("match", Parser.MATCH);
   ("with", Parser.WITH);
+=======
+  ("let", Parser.LET); 
+  ("and", Parser.ANDLET); 
+  ("in", Parser.IN); 
+  ("fun", Parser.FUN); 
+  ("rec", Parser.REC); 
+  ("dfun", Parser.DFUN); 
+  ("quit", Parser.QUIT); 
+>>>>>>> MLinter
 ]
 }
 
@@ -29,6 +39,7 @@ rule main = parse
 | "+" { Parser.PLUS }
 | "*" { Parser.MULT }
 | "<" { Parser.LT }
+<<<<<<< HEAD
 | "&&" { Parser.ANDAND }
 | "||" { Parser.BARBAR }
 | "(*" { comment 1 lexbuf }
@@ -40,6 +51,12 @@ rule main = parse
 | "[" { Parser.LBOX }
 | "]" { Parser.RBOX }
 | ";" { Parser.SEMI }
+=======
+| "&&" { Parser.AND} 
+| "||" { Parser.OR} 
+| "=" { Parser.EQ} 
+| "->" { Parser.RARROW} 
+>>>>>>> MLinter
 
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in
@@ -49,9 +66,17 @@ rule main = parse
       _ -> Parser.ID id
     }
 | eof { exit 0 }
+<<<<<<< HEAD
 and comment n = parse
 | "(*" { comment (n+1) lexbuf }
 | "*)" { if (n=1) then (main lexbuf) else (comment (n-1) lexbuf) }
 | _ { comment n lexbuf }
+=======
+| "(*" { comment lexbuf; main lexbuf } 
+and comment = parse
+  "(*" { comment lexbuf; comment lexbuf }
+ | "*)" { () }
+ | _ { comment lexbuf }
+>>>>>>> MLinter
 
 
