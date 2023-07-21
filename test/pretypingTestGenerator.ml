@@ -79,7 +79,7 @@ let gen_freevar_ty_tests (dataset: freevar_ty_testcase list) =
     ~ishow: (fun x -> x)
     ~oshow: string_of_myset
     ~cmp: cmp_for_myset
-    ~exec: exec 
+    ~exec: exec
     (List.map
        (fun (testcase: freevar_ty_testcase) ->
           Testutil.{ input = testcase.input; expected = testcase.expected })
@@ -136,7 +136,7 @@ let gen_subst_type_tests (dataset: subst_type_testcase list) =
        dataset)
 
 let gen_unify_tests (dataset: unify_testcase list) =
-  let exec eq = try UnifyOk (unify eq) with _ -> UnifyErr in
+  let exec eq = try UnifyOk (Result.get_ok (unify eq)) with _ -> UnifyErr in
   gen_tests
     ~ishow: (fun eq ->
         Printf.sprintf "unify %s"
