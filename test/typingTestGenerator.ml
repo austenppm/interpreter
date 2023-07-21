@@ -69,24 +69,12 @@ let convert_ty ty =
   let _, ty = convert [] ty in
   ty
 
-(* original *)
-(* let typing input =
+let typing input =
   Exec.exec
     (fun env program ->
        (* let env, ty = ty_decl env program *)
        let ty = ty_decl env program in
        env, ty)
-    Cui.initial_tyenv
-    input *)
-
-(*new try*)
-let typing input =
-  Exec.exec
-    (fun env program ->
-        (* let env, ty = ty_decl env program *)
-        let (ty_ls, new_env) = ty_decl env program in
-        let (_,ty) =  List.hd ty_ls in
-        new_env, ty)
     Cui.initial_tyenv
     input
 

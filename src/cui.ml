@@ -1,34 +1,40 @@
+open Syntax
 open Eval
-open Syntax 
-open Typing 
+open Typing
 
-let rec read_eval_print env tyenv = 
+(* インタフェース部分を表す関数 *)
+let rec read_eval_print env tyenv =
   print_string "# ";
   flush stdout;
-  let err_out str = Printf.printf "%s" str;  (*エラーメッセージ出力して、プロンプトに戻る*)
-  print_newline();
-  read_eval_print env tyenv in
-  (try
-  let decl = Parser.toplevel Lexer.main (Lexing.from_channel stdin) in
-  (* 型推論　type listを追加 *)
-  let (id_ty, newtyenv) = ty_decl tyenv decl in
-  let (idv, newenv) = eval_decl env decl in
-  (* 型推論　(id,v,ty)を要素とするリストを獲得 *)
-  let id_v_ty = List.map2 (fun (id,v) (_,ty) -> (id,v,ty)) idv id_ty in
-  List.iter (fun (id, v,ty) ->  
-     Printf.printf "val %s : " id; 
-     pp_ty ty;
-     print_string " = ";
-     pp_val v; 
-     print_newline()) id_v_ty; 
-  read_eval_print newenv newtyenv
-  with
-    Failure str -> err_out str
-  | Eval.Error str -> err_out str
-  | Parsing.Parse_error -> err_out "Syntax Error"
-  | Typing.Error str -> err_out str
-  | _ -> err_out "Unknown Error" )
+  (* 与えられたプログラムを抽象構文木に変換 *)
+  let decl =
+    try Parser.toplevel Lexer.main (Lexing.from_channel stdin) with
+    (* 例外が起こった場合はException (エラー名)を返します。ただparserのエラーだけFailureで拾えなかったのでその他のエラーは全てparserによる文法エラーと
+       　　見做しています。 *)
+    | Failure s -> Exception s
+    | _ -> Exception "syntax error"
+  in
+  (* 型推論を実行 *)
+  let ty = ty_decl tyenv decl in
+  (* 次の環境と、宣言の場合は束縛された変数とその値を求める。式の場合は次の環境と式を評価した値を求める *)
+  let id, newenv, v =
+    try eval_decl env decl
+    with
+    (* eval_decl関数は変数名、環境、束縛された値の三つ組を返すので、エラーが起こった場合には変数名を無しにして値をエラー文として出力させます。
+       環境はもちろんそのままです。 *)
+    | Error s ->
+      ("", env, ExceptV s)
+  in
+  (* 宣言の場合は束縛された変数とその値、式の場合は式を評価した値を出力する *)
+  Printf.printf "val %s : " id;
+  pp_ty ty;
+  print_string " = ";
+  pp_val v;
+  print_newline ();
+  (* 次の入力のために環境を更新してこれらの操作を繰り返す。 *)
+  read_eval_print newenv tyenv
 
+(* 大域環境を表す let 宣言 *)
 let initial_env =
   Environment.extend "i" (IntV 1)
   (Environment.extend "ii" (IntV 2)
