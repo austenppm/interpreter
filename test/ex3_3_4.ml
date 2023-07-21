@@ -9,6 +9,9 @@ let dataset_for_eval = [
   { input = "let x = 3 and y = 5 in x + y;;"; expected = IntV 8 };
   { input = "let z = let x = 3 and y = 5 in x + y;;\nz;;"; expected = IntV 8 };
   { input = "let x = 1 and y = 2 in let z = x and w = y in z + w;;"; expected = IntV 3 };
+  { input = "let x = 1 and y = 2 and z = 3 in x + y + z;;"; expected = IntV 6 };
+  { input = "let x = 1 and y = 2 and z = 3;;\n x + y + z;;"; expected = IntV 6};
+  { input = "let a = 1 and b = 2 and c = 3 and d = 4 in a + b + c + d;;"; expected = IntV 10 };
 ];;
 
 let dataset_for_evalerror = [

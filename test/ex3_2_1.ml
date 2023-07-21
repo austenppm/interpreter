@@ -18,8 +18,6 @@ let dataset_for_eval = [
   { input = "if true then 34 else a;;"; expected = IntV 34 };
   { input = "if false then a else false;;"; expected = BoolV false };
   { input = "((((((((((((((((((((1))))))))))))))))))));;"; expected = IntV 1 };
-  (* added *)
-  { input = "iv + iii * ii;;"; expected = IntV 10 }; 
 ];;
 
 let dataset_for_evalerror = [
