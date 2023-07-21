@@ -1,117 +1,95 @@
 (* ML interpreter / type reconstruction *)
-exception Error of string
-
-(* エラーを定義するための関数 *)
-let err s = raise (Error s)
-
-(* 変数・パラメータを表す型 *)
 type id = string
 
-(* 二項演算子を表す型 *)
-type binOp = Plus | Mult | Lt | Andand | Barbar
+type binOp =
+  | Plus
+  | Mult
+  | Lt
+  | And
+  | Or
+  | Append
 
-(* 式の抽象構文木を表す型 *)
+let pp_binop = function
+  | Plus -> "+"
+  | Mult -> "*"
+  | Lt -> "<"
+  | And -> "&&"
+  | Or -> "||"
+  | Append -> "::"
+
 type exp =
   | Var of id
   | ILit of int
   | BLit of bool
+  | Nil
   | BinOp of binOp * exp * exp
   | IfExp of exp * exp * exp
-  | LetExp of id * exp * exp
+  | LetExp of (id * exp) list * exp
   | FunExp of id * exp
-  (* 動的束縛の構文を表す型 *)
-  | DFunExp of id * exp
   | AppExp of exp * exp
-  (* let rec式の構文です。 *)
   | LetRecExp of id * id * exp * exp
-  | NilExp
-  | ConsExp of exp * exp
   | MatchExp of exp * exp * id * id * exp
 
-(* 宣言を含む抽象構文木を表す型 *)
+let rec pp_exp = function
+  | Var id -> id
+  | ILit i -> string_of_int i
+  | BLit b -> string_of_bool b
+  | Nil -> "[]"
+  | BinOp (op, exp1, exp2) ->
+      pp_exp exp1 ^ " " ^ pp_binop op ^ " " ^ pp_exp exp2
+  | IfExp (exp1, exp2, exp3) ->
+      "if " ^ pp_exp exp1 ^ " then " ^ pp_exp exp2 ^ " else " ^ pp_exp exp3
+  | LetExp (vars, exp2) ->
+      "let "
+      ^ List.fold_left
+          (fun acc (id, exp) ->
+            acc
+            ^ (if acc = "" then "" else "and")
+            ^ " " ^ id ^ " = " ^ pp_exp exp)
+          "" vars
+      ^ " in " ^ pp_exp exp2
+  | FunExp (id, exp) -> "fun " ^ id ^ " -> " ^ pp_exp exp
+  | AppExp (exp1, exp2) -> "(" ^ pp_exp exp1 ^ " " ^ pp_exp exp2 ^ ")"
+  | LetRecExp (id1, id2, exp1, exp2) ->
+      "let rec " ^ id1 ^ " = fun " ^ id2 ^ " -> " ^ pp_exp exp1 ^ " in "
+      ^ pp_exp exp2
+  | MatchExp (exp, exp1, x, xs, exp2) ->
+      "match " ^ pp_exp exp ^ " with [] -> " ^ pp_exp exp1 ^ " | " ^ x ^ "::"
+      ^ xs ^ " -> " ^ pp_exp exp2
+
 type program =
   | Exp of exp
-  | Decl of id * exp
+  | Decl of (id * exp) list
   | RecDecl of id * id * exp
-  (* 構文解析の段階でエラーが出た場合の値です。 *)
-  | Exception of id
 
-(* 型変数を表す型。次々に新しく型変数を定義できるように int で管理する。 *)
 type tyvar = int
 
-(* 型を表す型 *)
-type ty = TyInt | TyBool | TyVar of tyvar | TyFun of ty * ty | TyList of ty
+type ty =
+  | TyInt
+  | TyBool
+  | TyVar of tyvar
+  | TyFun of ty * ty
+  | TyList of ty
 
-(* 式中の型変数を全て求める関数。freevar って名前だし自由変数かも？ *)
-let rec freevar_ty ty =
-  match ty with
-  (* TyIntとTyBoolは型変数ではないので空集合を返します。 *)
-  | TyInt -> MySet.empty
-  | TyBool -> MySet.empty
-  (* TyVarは型変数なので、そのままそれを唯一の要素とする集合を返します。 *)
-  | TyVar t -> MySet.singleton t
-  (* TyFunの引数中に出現する全ての型変数の集合の和集合を返します。 *)
-  | TyFun (l, r) -> MySet.union (freevar_ty l) (freevar_ty r)
-  | TyList t -> freevar_ty t
+let string_of_tyvar tyvar : string =
+  "'"
+  ^ String.make 1 (char_of_int (int_of_char 'a' + (tyvar mod 26)))
+  ^ if tyvar < 26 then "" else string_of_int (tyvar / 26)
 
-(* 型を出力する際に使う関数 *)
-let rec string_of_ty ty =
-  match ty with
-  (* TyIntとTyBoolはそのままstring型のint,boolにします。 *)
-  | TyInt -> "int"
-  | TyBool -> "bool"
-  (* TyVarはint型であり、0と"'a"の対応から始まり、25と"'z"まで行くと、26からは"'a1"、"'b1"...となるから、TyVarの値を26で割り、余りに対応したアルファベットと
-     商の値を連結したものを返します。 *)
-  | TyVar t ->
-      let rec string_of_free k =
-        match k with
-        | 0 -> "'a"
-        | 1 -> "'b"
-        | 2 -> "'c"
-        | 3 -> "'d"
-        | 4 -> "'e"
-        | 5 -> "'f"
-        | 6 -> "'g"
-        | 7 -> "'h"
-        | 8 -> "'i"
-        | 9 -> "'j"
-        | 10 -> "'k"
-        | 11 -> "'l"
-        | 12 -> "'m"
-        | 13 -> "'n"
-        | 14 -> "'o"
-        | 15 -> "'p"
-        | 16 -> "'q"
-        | 17 -> "'r"
-        | 18 -> "'s"
-        | 19 -> "'t"
-        | 20 -> "'u"
-        | 21 -> "'v"
-        | 22 -> "'w"
-        | 23 -> "'x"
-        | 24 -> "'y"
-        | 25 -> "'z"
-        | n -> string_of_free (n mod 26) ^ string_of_int (n / 26)
-      in
-      string_of_free t
-  (* 右結合で"（第一引数の型） -> （第二引数の型）"を返します。 *)
-  | TyFun (l, r) -> (
-      match l with
-      | TyFun (_, _) -> "(" ^ string_of_ty l ^ ")" ^ " -> " ^ string_of_ty r
-      | _ -> string_of_ty l ^ " -> " ^ string_of_ty r)
-  | TyList t -> string_of_ty t ^ " list"
-
-(* 型を出力する関数 *)
-let pp_ty ty =
-  (* 引数をstring_of_tyに通してstring型にしてから出力します。 *)
-  print_string (string_of_ty ty)
-
-(* 新しい型変数を作る関数 *)
-let fresh_tyvar =
-  let counter = ref 0 in
-  let body () =
-    let v = !counter in
-    counter := v + 1;
-    v
+(*
+  TyFun に関しては一番外側でのみ括弧がつかない。実質的な実装は string_of_ty' に置いて
+  外側の string_of_ty には TyFun に関する（括弧がつかないような）処理のみを置いた。
+*)
+let string_of_ty ty : string =
+  let rec string_of_ty' = function
+    | TyInt -> "int"
+    | TyBool -> "bool"
+    | TyVar tyvar -> string_of_tyvar tyvar
+    | TyFun (x, y) -> "(" ^ string_of_ty' x ^ " -> " ^ string_of_ty' y ^ ")"
+    | TyList x -> string_of_ty' x ^ " list"
   in
-  body
+  match ty with
+  | TyFun (x, y) -> string_of_ty' x ^ " -> " ^ string_of_ty' y
+  | _ -> string_of_ty' ty
+
+let pp_ty = string_of_ty
